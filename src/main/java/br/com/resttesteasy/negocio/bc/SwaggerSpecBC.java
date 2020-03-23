@@ -1,7 +1,9 @@
 package br.com.resttesteasy.negocio.bc;
 
+import java.util.List;
+
 public interface SwaggerSpecBC {
 
-	void testarTodosServicos(String url) throws Throwable;
+	List<String> testUnauthorized(String url);
 
 }
