@@ -1,5 +1,7 @@
 package br.com.resttesteasy.negocio.util;
 
+import static io.restassured.http.ContentType.ANY;
+import static io.restassured.http.ContentType.JSON;
 import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 import java.net.MalformedURLException;
@@ -9,6 +11,8 @@ import java.util.List;
 
 import org.json.JSONObject;
 import org.springframework.web.client.RestTemplate;
+
+import com.oracle.jrockit.jfr.ContentType;
 
 import io.restassured.RestAssured;
 
@@ -22,13 +26,24 @@ public class ServicesFromSwagger {
 		paths.names().forEach(p -> {
 			String path = p.toString();
 			JSONObject pathObject = paths.getJSONObject(path);
+			
 			JSONObject get = pathObject.optJSONObject("get");
 			if (get != null) {
 				int status = RestAssured.given().get(montarURL(urlSpec, path, swaggerSpec)).getStatusCode();
 				if (UNAUTHORIZED.value() != status) {
-					msgs.add(path + ": GET");
+					msgs.add("GET: " + path + " -> satus: " +status );
 				}
 			}
+			
+			JSONObject post = pathObject.optJSONObject("post");
+			if (post != null) {
+				String contentType = post.getJSONArray("consumes").getString(0);
+				int status = RestAssured.given().contentType(contentType).post(montarURL(urlSpec, path, swaggerSpec)).getStatusCode();
+				if (UNAUTHORIZED.value() != status) {
+					msgs.add("POST: " + path + " -> satus: " +status );
+				}
+			}
+			
 		});
 		return msgs;
 	}
