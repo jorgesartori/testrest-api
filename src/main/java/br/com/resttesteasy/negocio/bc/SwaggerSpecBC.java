@@ -6,6 +6,6 @@ import br.com.resttesteasy.negocio.dto.ResponseDTO;
 
 public interface SwaggerSpecBC {
 
-	List<ResponseDTO> testStatusCode(String url, int statusCode, String skipPaths);
+	List<ResponseDTO> testStatusCode(String url, int statusCode, String skipPaths, String token);
 
 }

@@ -9,8 +9,8 @@ import br.com.resttesteasy.negocio.util.ServicesFromSwagger;
 
 public class SwaggerSpecBCImpl implements SwaggerSpecBC {
 	@Override
-	public List<ResponseDTO> testStatusCode(String url, int statusCode, String skipPaths) {
-		return ServicesFromSwagger.testStatusCode(defaultString(url), statusCode, defaultString(skipPaths));
+	public List<ResponseDTO> testStatusCode(String url, int statusCode, String skipPaths, String token) {
+		return ServicesFromSwagger.testStatusCode(defaultString(url), statusCode, defaultString(skipPaths), token);
 	}
 
 }
