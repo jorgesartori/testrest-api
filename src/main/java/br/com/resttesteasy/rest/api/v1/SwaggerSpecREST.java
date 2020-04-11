@@ -5,7 +5,6 @@ import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import java.util.List;
 
 import javax.inject.Inject;
-import javax.validation.constraints.NotNull;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
@@ -14,10 +13,8 @@ import javax.ws.rs.core.Response;
 
 import br.com.resttesteasy.negocio.bc.SwaggerSpecBC;
 import br.com.resttesteasy.negocio.dto.ResponseDTO;
-import io.swagger.annotations.Api;
 
 @Path("v1/swagger")
-@Api
 public class SwaggerSpecREST {
 
     @Inject
@@ -25,7 +22,7 @@ public class SwaggerSpecREST {
 
     @GET
     @Produces(APPLICATION_JSON)
-    public Response testStatusCode(@NotNull @QueryParam(value = "url-spec") String url,
+    public Response testStatusCode(@QueryParam(value = "url-spec") String url,
         @QueryParam(value = "status-code") int statusCode, @QueryParam(value = "skip-paths") String skipPaths,
         @QueryParam(value = "token") String token) {
         List<ResponseDTO> listaFalhas = swaggerBC.testStatusCode(url, statusCode, skipPaths, token);

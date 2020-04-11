@@ -1,6 +1,8 @@
 package br.com.resttesteasy.negocio.util;
 
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
+import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
+import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -60,25 +62,32 @@ public class ServicesFromSwagger {
             request.auth().oauth2(token);
         }
 
-        String contentType = null;
+        String contentType = "";
         if (isVersao3OAS) {
             if (methodObject.has("requestBody")) {
                 contentType =
                     methodObject.getJSONObject("requestBody").getJSONObject("content").names().getString(0);
                 request.contentType(contentType);
-                request.body("{}");
             }
         } else {
             if (methodObject.has("consumes")) {
                 contentType = methodObject.getJSONArray("consumes").getString(0);
                 request.contentType(contentType);
-                request.body("{}");
             }
         }
-        if ("multipart/form-data".equals(contentType)) {
+
+        switch (contentType) {
+        case APPLICATION_JSON_VALUE:
+            request.body("{}");
+            break;
+        case MULTIPART_FORM_DATA_VALUE:
             request.multiPart("contrlName", "contentBody");
             request.formParam("key", "value");
+            break;
+        default:
+            break;
         }
+
         return request;
     }
 
