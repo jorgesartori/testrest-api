@@ -1,8 +1,8 @@
 package br.com.resttesteasy.negocio.util;
 
+import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
+import static javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
-import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
-import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -11,7 +11,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.json.JSONObject;
-import org.springframework.web.client.RestTemplate;
 
 import br.com.resttesteasy.negocio.dto.ResponseDTO;
 import io.restassured.RestAssured;
@@ -23,7 +22,7 @@ public class ServicesFromSwagger {
         String token) {
 
         List<ResponseDTO> resultFailedList = new ArrayList<>();
-        List<String> setSkipPaths = Arrays.asList(skipPaths.split("\\s*,\\s*"));
+        List<String> setSkipPaths = Arrays.asList(skipPaths.trim().split("\\s*,\\s*"));
 
         JSONObject swaggerSpec = getSwaggerSpec(urlSpec);
         boolean isVersao3OAS = swaggerSpec.has("openapi");
@@ -77,10 +76,10 @@ public class ServicesFromSwagger {
         }
 
         switch (contentType) {
-        case APPLICATION_JSON_VALUE:
+        case APPLICATION_JSON:
             request.body("{}");
             break;
-        case MULTIPART_FORM_DATA_VALUE:
+        case MULTIPART_FORM_DATA:
             request.multiPart("contrlName", "contentBody");
             request.formParam("key", "value");
             break;
@@ -92,7 +91,8 @@ public class ServicesFromSwagger {
     }
 
     private static JSONObject getSwaggerSpec(String urlSpec) {
-        String body = new RestTemplate().getForEntity(urlSpec, String.class).getBody();
+        String body =
+            RestAssured.given().relaxedHTTPSValidation().baseUri(urlSpec).get().getBody().asString();
         return new JSONObject(body);
     }
 
