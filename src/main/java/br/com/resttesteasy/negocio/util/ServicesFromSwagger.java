@@ -1,5 +1,6 @@
 package br.com.resttesteasy.negocio.util;
 
+import static io.restassured.http.ContentType.JSON;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
@@ -14,105 +15,121 @@ import org.json.JSONObject;
 
 import br.com.resttesteasy.negocio.dto.ResponseDTO;
 import io.restassured.RestAssured;
+import io.restassured.http.ContentType;
 import io.restassured.specification.RequestSpecification;
 
 public class ServicesFromSwagger {
 
-    public static List<ResponseDTO> testStatusCode(String urlSpec, int statusCodeExpected, String skipPaths,
-        String token) {
+	private static String basePath;
 
-        List<ResponseDTO> resultFailedList = new ArrayList<>();
-        List<String> setSkipPaths = Arrays.asList(skipPaths.trim().split("\\s*,\\s*"));
+	public static List<ResponseDTO> testStatusCode(String urlSpec, int statusCodeExpected, String skipPaths,
+			String token) {
 
-        JSONObject swaggerSpec = getSwaggerSpec(urlSpec);
-        boolean isVersao3OAS = swaggerSpec.has("openapi");
-        JSONObject paths = swaggerSpec.getJSONObject("paths");
+		List<ResponseDTO> resultFailedList = new ArrayList<>();
+		List<String> setSkipPaths = Arrays.asList(skipPaths.trim().split("\\s*,\\s*"));
 
-        // for each path
-        paths.names().forEach(p -> {
-            String path = p.toString();
-            if (setSkipPaths.contains(path)) {
-                return;
-            }
-            JSONObject pathObject = paths.getJSONObject(path);
+		JSONObject swaggerSpec = getSwaggerSpec(urlSpec);
+		boolean isVersao3OAS = swaggerSpec.has("openapi");
+		JSONObject paths = swaggerSpec.getJSONObject("paths");
+		basePath = getBasePath(swaggerSpec, isVersao3OAS, paths);
 
-            // for each method
-            pathObject.keySet().forEach(method -> {
-                JSONObject methodObject = pathObject.getJSONObject(method);
+		// for each path
+		paths.names().forEach(p -> {
+			String path = p.toString();
+			if (setSkipPaths.contains(path)) {
+				return;
+			}
+			JSONObject pathObject = paths.getJSONObject(path);
 
-                RequestSpecification restassured = configNewReqSpec(methodObject, isVersao3OAS, token);
-                Integer statusCode = restassured
-                    .request(method, buildURL(urlSpec, path, swaggerSpec, isVersao3OAS)).getStatusCode();
+			// for each method
+			pathObject.keySet().forEach(method -> {
+				JSONObject methodObject = pathObject.getJSONObject(method);
 
-                if (statusCodeExpected != statusCode) {
-                    resultFailedList.add(new ResponseDTO(path, method, statusCode));
-                }
-            });
+				RequestSpecification restassured = configNewReqSpec(methodObject, isVersao3OAS, token);
+				Integer statusCode = restassured.request(method, buildURL(urlSpec, path, swaggerSpec, isVersao3OAS))
+						.getStatusCode();
 
-        });
-        return resultFailedList;
-    }
+				if (statusCodeExpected != statusCode) {
+					resultFailedList.add(new ResponseDTO(path, method, statusCode));
+				}
+			});
 
-    private static RequestSpecification configNewReqSpec(JSONObject methodObject, boolean isVersao3OAS,
-        String token) {
-        RequestSpecification request = RestAssured.given().relaxedHTTPSValidation();
+		});
+		return resultFailedList;
+	}
 
-        if (isNotBlank(token)) {
-            request.auth().oauth2(token);
-        }
+	private static String getBasePath(JSONObject swaggerSpec, boolean isVersao3OAS, JSONObject paths) {
+		if (isVersao3OAS) {
+			if (swaggerSpec.has("servers")) {
+				return swaggerSpec.getJSONArray("servers").getJSONObject(0).getString("url");
+			} else {
+				// em alguns casos, o plugin gerador do arquivo openapi coloca o contexto da aplicacao em cada path, não usando server.
+				// nestes casos, o basepath é a primeira parte de qualquer path.
+				return "/".concat(paths.names().get(0).toString().split("/")[1]);
+			}
+		} else {
+			return swaggerSpec.getString("basePath");
+		}
+	}
 
-        String contentType = "";
-        if (isVersao3OAS) {
-            if (methodObject.has("requestBody")) {
-                contentType =
-                    methodObject.getJSONObject("requestBody").getJSONObject("content").names().getString(0);
-                request.contentType(contentType);
-            }
-        } else {
-            if (methodObject.has("consumes")) {
-                contentType = methodObject.getJSONArray("consumes").getString(0);
-                request.contentType(contentType);
-            }
-        }
+	private static RequestSpecification configNewReqSpec(JSONObject methodObject, boolean isVersao3OAS, String token) {
+		RequestSpecification request = RestAssured.given().relaxedHTTPSValidation();
 
-        switch (contentType) {
-        case APPLICATION_JSON:
-            request.body("{}");
-            break;
-        case MULTIPART_FORM_DATA:
-            request.multiPart("contrlName", "contentBody");
-            request.formParam("key", "value");
-            break;
-        default:
-            break;
-        }
+		if (isNotBlank(token)) {
+			request.auth().oauth2(token);
+		}
 
-        return request;
-    }
+		String contentType = "";
+		if (isVersao3OAS) {
+			if (methodObject.has("requestBody")) {
+				contentType = methodObject.getJSONObject("requestBody").getJSONObject("content").names().getString(0);
+				request.contentType(contentType);
+			}
+		} else {
+			if (methodObject.has("consumes")) {
+				contentType = methodObject.getJSONArray("consumes").getString(0);
+				request.contentType(contentType);
+			}
+		}
 
-    private static JSONObject getSwaggerSpec(String urlSpec) {
-        String body =
-            RestAssured.given().relaxedHTTPSValidation().baseUri(urlSpec).get().getBody().asString();
-        return new JSONObject(body);
-    }
+		switch (contentType) {
+		case APPLICATION_JSON:
+			request.body("{}");
+			break;
+		case MULTIPART_FORM_DATA:
+			request.multiPart("contrlName", "contentBody");
+			request.formParam("key", "value");
+			break;
+		default:
+			break;
+		}
 
-    private static URL buildURL(String urlSpec, String path, JSONObject swaggerSpec, boolean isVersao3OAS) {
-        String basePath = null;
-        if (isVersao3OAS) {
-            basePath = swaggerSpec.getJSONArray("servers").getJSONObject(0).getString("url");
-        } else {
-            basePath = swaggerSpec.getString("basePath");
-        }
-        String baseUrl = urlSpec.split(basePath)[0];
-        try {
-            return new URL(baseUrl + basePath + pathWithFakePathParams(path));
-        } catch (MalformedURLException e) {
-            return null;
-        }
-    }
+		return request;
+	}
 
-    private static String pathWithFakePathParams(String path) {
-        return path.replaceAll("\\{[^//]*\\}", "1");
-    }
+	private static JSONObject getSwaggerSpec(String urlSpec) {
+		String body = RestAssured.given().accept(JSON).relaxedHTTPSValidation().baseUri(urlSpec).get().getBody()
+				.asString();
+		return new JSONObject(body);
+	}
+
+	private static URL buildURL(String urlSpec, String path, JSONObject swaggerSpec, boolean isVersao3OAS) {
+		String baseUrl = urlSpec.split(basePath)[0];
+		try {
+			String url = "";
+			if (path.contains(basePath)) {
+				 url = baseUrl + pathWithFakePathParams(path);
+			} else {
+				url = baseUrl + basePath + pathWithFakePathParams(path);
+			}
+			return new URL(url);
+		} catch (MalformedURLException e) {
+			return null;
+		}
+	}
+
+	private static String pathWithFakePathParams(String path) {
+		return path.replaceAll("\\{[^//]*\\}", "1");
+	}
 
 }

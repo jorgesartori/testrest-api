@@ -17,19 +17,18 @@ import br.com.resttesteasy.negocio.dto.ResponseDTO;
 @Path("v1/swagger")
 public class SwaggerSpecREST {
 
-    @Inject
-    private SwaggerSpecBC swaggerBC;
+	@Inject
+	private SwaggerSpecBC swaggerBC;
 
-    @GET
-    @Produces(APPLICATION_JSON)
-    public Response testStatusCode(@QueryParam(value = "url-spec") String url,
-        @QueryParam(value = "status-code") int statusCode, @QueryParam(value = "skip-paths") String skipPaths,
-        @QueryParam(value = "token") String token) {
-        List<ResponseDTO> listaFalhas = swaggerBC.testStatusCode(url, statusCode, skipPaths, token);
-        if (listaFalhas.isEmpty()) {
-            return Response.ok().build();
-        }
-        return Response.status(422).entity(listaFalhas).build();
+	@GET
+	@Produces(APPLICATION_JSON)
+	public Response testStatusCode(@QueryParam("url-spec") String url, @QueryParam("status-code") int statusCode,
+			@QueryParam("skip-paths") String skipPaths, @QueryParam("token") String token) {
+		List<ResponseDTO> listaFalhas = swaggerBC.testStatusCode(url, statusCode, skipPaths, token);
+		if (listaFalhas.isEmpty()) {
+			return Response.ok().build();
+		}
+		return Response.status(422).entity(listaFalhas).build();
 
-    }
+	}
 }
