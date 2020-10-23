@@ -1,6 +1,7 @@
 package br.com.resttesteasy.negocio.util;
 
 import static io.restassured.http.ContentType.JSON;
+import static java.lang.String.format;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
@@ -10,17 +11,22 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Logger;
 
 import org.json.JSONObject;
 
 import br.com.resttesteasy.negocio.dto.ResponseDTO;
 import io.restassured.RestAssured;
-import io.restassured.http.ContentType;
+import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
 
 public class ServicesFromSwagger {
 
+	private static String host;
+
 	private static String basePath;
+
+	private static final Logger log = Logger.getLogger(ServicesFromSwagger.class.getName());
 
 	public static List<ResponseDTO> testStatusCode(String urlSpec, int statusCodeExpected, String skipPaths,
 			String token) {
@@ -28,12 +34,19 @@ public class ServicesFromSwagger {
 		List<ResponseDTO> resultFailedList = new ArrayList<>();
 		List<String> setSkipPaths = Arrays.asList(skipPaths.trim().split("\\s*,\\s*"));
 
+		log.info("recuperando openapi.json spec...");
 		JSONObject swaggerSpec = getSwaggerSpec(urlSpec);
-		boolean isVersao3OAS = swaggerSpec.has("openapi");
-		JSONObject paths = swaggerSpec.getJSONObject("paths");
-		basePath = getBasePath(swaggerSpec, isVersao3OAS, paths);
+		log.info("openapi.json spec recuperada com sucesso.");
 
-		// for each path
+		boolean isVersao3OAS = swaggerSpec.has("openapi");
+
+		JSONObject paths = swaggerSpec.getJSONObject("paths");
+		getBasePath(swaggerSpec, isVersao3OAS, paths);
+		host = urlSpec.split(basePath + "/")[0];
+		log.info("host configurado: " + host);
+		log.info("basePath configurado: " + basePath);
+
+		log.info(format("chamando todos os serviços (esperando status code = %d)...", statusCodeExpected));
 		paths.names().forEach(p -> {
 			String path = p.toString();
 			if (setSkipPaths.contains(path)) {
@@ -46,8 +59,10 @@ public class ServicesFromSwagger {
 				JSONObject methodObject = pathObject.getJSONObject(method);
 
 				RequestSpecification restassured = configNewReqSpec(methodObject, isVersao3OAS, token);
-				Integer statusCode = restassured.request(method, buildURL(urlSpec, path, swaggerSpec, isVersao3OAS))
-						.getStatusCode();
+				Response response = restassured.request(method, buildURL(path));
+				response.then().log().status();
+				log.info("\n");
+				Integer statusCode = response.getStatusCode();
 
 				if (statusCodeExpected != statusCode) {
 					resultFailedList.add(new ResponseDTO(path, method, statusCode));
@@ -55,25 +70,25 @@ public class ServicesFromSwagger {
 			});
 
 		});
+
 		return resultFailedList;
 	}
 
-	private static String getBasePath(JSONObject swaggerSpec, boolean isVersao3OAS, JSONObject paths) {
+	private static void getBasePath(JSONObject swaggerSpec, boolean isVersao3OAS, JSONObject paths) {
 		if (isVersao3OAS) {
 			if (swaggerSpec.has("servers")) {
-				return swaggerSpec.getJSONArray("servers").getJSONObject(0).getString("url");
+				basePath = swaggerSpec.getJSONArray("servers").getJSONObject(0).getString("url");
 			} else {
-				// em alguns casos, o plugin gerador do arquivo openapi coloca o contexto da aplicacao em cada path, não usando server.
-				// nestes casos, o basepath é a primeira parte de qualquer path.
-				return "/".concat(paths.names().get(0).toString().split("/")[1]);
+				log.info("basePath não informado em 'servers.url', utilizando primeira parte do path.");
+				basePath = "/".concat(paths.names().get(0).toString().split("/")[1]);
 			}
 		} else {
-			return swaggerSpec.getString("basePath");
+			basePath = swaggerSpec.getString("basePath");
 		}
 	}
 
 	private static RequestSpecification configNewReqSpec(JSONObject methodObject, boolean isVersao3OAS, String token) {
-		RequestSpecification request = RestAssured.given().relaxedHTTPSValidation();
+		RequestSpecification request = RestAssured.given().relaxedHTTPSValidation().log().method().log().uri();
 
 		if (isNotBlank(token)) {
 			request.auth().oauth2(token);
@@ -108,19 +123,20 @@ public class ServicesFromSwagger {
 	}
 
 	private static JSONObject getSwaggerSpec(String urlSpec) {
-		String body = RestAssured.given().accept(JSON).relaxedHTTPSValidation().baseUri(urlSpec).get().getBody()
-				.asString();
+		Response response = RestAssured.given().accept(JSON).relaxedHTTPSValidation().baseUri(urlSpec).log().all()
+				.get();
+		response.then().log().all();
+		String body = response.getBody().asString();
 		return new JSONObject(body);
 	}
 
-	private static URL buildURL(String urlSpec, String path, JSONObject swaggerSpec, boolean isVersao3OAS) {
-		String baseUrl = urlSpec.split(basePath)[0];
+	private static URL buildURL(String path) {
 		try {
 			String url = "";
 			if (path.contains(basePath)) {
-				 url = baseUrl + pathWithFakePathParams(path);
+				url = host + pathWithFakePathParams(path);
 			} else {
-				url = baseUrl + basePath + pathWithFakePathParams(path);
+				url = host + basePath + pathWithFakePathParams(path);
 			}
 			return new URL(url);
 		} catch (MalformedURLException e) {
