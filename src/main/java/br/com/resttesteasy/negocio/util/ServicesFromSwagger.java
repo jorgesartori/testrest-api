@@ -9,13 +9,16 @@ import static org.apache.commons.lang3.StringUtils.isNotBlank;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
 
 import org.json.JSONObject;
 
 import br.com.resttesteasy.negocio.dto.ResponseDTO;
+import br.com.resttesteasy.negocio.dto.TestConfigDTO;
 import io.restassured.RestAssured;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
@@ -28,11 +31,11 @@ public class ServicesFromSwagger {
 
 	private static final Logger log = Logger.getLogger(ServicesFromSwagger.class.getName());
 
-	public static List<ResponseDTO> testStatusCode(String urlSpec, int statusCodeExpected, String skipPaths,
-			String token) {
+	public static List<ResponseDTO> testStatusCode(TestConfigDTO dto) {
+		String urlSpec = dto.getUrlSpec();
+		int statusCodeExpected = dto.getStatusCode();
 
 		List<ResponseDTO> resultFailedList = new ArrayList<>();
-		List<String> setSkipPaths = Arrays.asList(skipPaths.trim().split("\\s*,\\s*"));
 
 		log.info("recuperando openapi.json spec...");
 		JSONObject swaggerSpec = getSwaggerSpec(urlSpec);
@@ -49,7 +52,12 @@ public class ServicesFromSwagger {
 		log.info(format("chamando todos os serviços (esperando status code = %d)...", statusCodeExpected));
 		paths.names().forEach(p -> {
 			String path = p.toString();
-			if (setSkipPaths.contains(path)) {
+
+			if (dto.getOnlyPaths() != null && !dto.getOnlyPaths().isEmpty() && !dto.getOnlyPaths().contains(path)) {
+				return;
+			}
+
+			if (dto.getSkipPaths() != null && !dto.getSkipPaths().isEmpty() && dto.getSkipPaths().contains(path)) {
 				return;
 			}
 			JSONObject pathObject = paths.getJSONObject(path);
@@ -58,11 +66,11 @@ public class ServicesFromSwagger {
 			pathObject.keySet().forEach(method -> {
 				JSONObject methodObject = pathObject.getJSONObject(method);
 
-				RequestSpecification restassured = configNewReqSpec(methodObject, isVersao3OAS, token);
-				Response response = restassured.request(method, buildURL(path));
+				RequestSpecification restassured = configNewReqSpec(methodObject, isVersao3OAS, dto);
+				Response response = restassured.request(method, buildURL(path, dto.getPathParams()));
 				response.then().log().status();
 				log.info("\n");
-				Integer statusCode = response.getStatusCode();
+				int statusCode = response.getStatusCode();
 
 				if (statusCodeExpected != statusCode) {
 					resultFailedList.add(new ResponseDTO(path, method, statusCode));
@@ -87,11 +95,17 @@ public class ServicesFromSwagger {
 		}
 	}
 
-	private static RequestSpecification configNewReqSpec(JSONObject methodObject, boolean isVersao3OAS, String token) {
-		RequestSpecification request = RestAssured.given().relaxedHTTPSValidation().log().method().log().uri();
+	private static RequestSpecification configNewReqSpec(JSONObject methodObject, boolean isVersao3OAS,
+			TestConfigDTO dto) {
+		RequestSpecification request = RestAssured.given().relaxedHTTPSValidation().log().method().log().uri().log()
+				.headers();
 
-		if (isNotBlank(token)) {
-			request.auth().oauth2(token);
+		if (dto.getHeaders() != null) {
+			request.headers(dto.getHeaders());
+		}
+
+		if (isNotBlank(dto.getToken())) {
+			request.auth().oauth2(dto.getToken());
 		}
 
 		String contentType = "";
@@ -130,13 +144,13 @@ public class ServicesFromSwagger {
 		return new JSONObject(body);
 	}
 
-	private static URL buildURL(String path) {
+	private static URL buildURL(String path, Map<String, String> pathParams) {
 		try {
 			String url = "";
 			if (path.contains(basePath)) {
-				url = host + pathWithFakePathParams(path);
+				url = host + pathWithPathParams(path, pathParams);
 			} else {
-				url = host + basePath + pathWithFakePathParams(path);
+				url = host + basePath + pathWithPathParams(path, pathParams);
 			}
 			return new URL(url);
 		} catch (MalformedURLException e) {
@@ -144,7 +158,14 @@ public class ServicesFromSwagger {
 		}
 	}
 
-	private static String pathWithFakePathParams(String path) {
+	private static String pathWithPathParams(String path, Map<String, String> pathParams) {
+		if (pathParams != null) {
+			Set<String> chaves = pathParams.keySet();
+			for (Iterator iterator = chaves.iterator(); iterator.hasNext();) {
+				String k = (String) iterator.next();
+				path = path.replace(format("{%s}", k), pathParams.get(k));
+			}
+		}
 		return path.replaceAll("\\{[^//]*\\}", "1");
 	}
 
